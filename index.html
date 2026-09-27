@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grafo dei confini 3D</title>
+<meta name="description" content="Grafo interattivo 3D degli Stati confinanti, con i km di ogni confine (dati Wikipedia).">
+<style>
+  body { margin: 0; background: #0b0e14; color: #ddd; font-family: sans-serif; overflow: hidden; }
+  a { color: #8cf; }
+
+  #info { position: absolute; top: 10px; left: 12px; z-index: 1; font-size: 14px;
+          line-height: 1.6; background: rgba(0, 0, 0, .7); padding: 8px 12px;
+          border-radius: 6px; max-width: calc(100vw - 48px); }
+  #info summary { cursor: pointer; font-weight: bold; }
+  #info button, #info input, #info select { margin-top: 6px; font: inherit; cursor: pointer; }
+  #info input { width: 100%; max-width: 260px; box-sizing: border-box; cursor: text; }
+  .aiuto { color: #aab; font-size: 13px; }
+  .fonte { color: #778; font-size: 12px; }
+
+  /* istruzioni diverse per mouse e touch */
+  .touch { display: none; }
+  @media (pointer: coarse) { .mouse { display: none; } .touch { display: inline; } }
+
+  #scheda { position: absolute; left: 12px; bottom: 12px; z-index: 1; width: 320px;
+            max-width: calc(100vw - 48px); max-height: 40vh; overflow-y: auto;
+            background: rgba(0, 0, 0, .8); padding: 10px 12px; border-radius: 6px;
+            font-size: 14px; line-height: 1.5; }
+  #scheda[hidden] { display: none; }
+  #scheda ol { margin: 6px 0 0; padding-left: 22px; }
+  #chiudi { float: right; background: none; border: 0; color: #aab; font-size: 20px;
+            line-height: 1; cursor: pointer; padding: 0 0 0 8px; }
+
+  #grafo canvas { cursor: grab; touch-action: none; }
+  #grafo canvas:active { cursor: grabbing; }
+  #etichette { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+  .etichetta { position: absolute; left: 0; top: 0; white-space: nowrap; color: #fff;
+               text-shadow: 0 0 3px #000, 0 0 3px #000; }
+
+  @media (max-width: 600px) {
+    #info { top: 8px; left: 8px; padding: 6px 10px; }
+    #scheda { left: 8px; bottom: 8px; }
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/3d-force-graph@1"></script>
+</head>
+<body>
+<details id="info" open>
+  <summary>Stati confinanti</summary>
+  <input id="cerca" list="stati" placeholder="Cerca uno Stato…">
+  <datalist id="stati"></datalist><br>
+  <span class="aiuto mouse">
+    trascina: sposta · rotella: zoom verso il puntatore<br>
+    <b>Shift</b> + trascina (o tasto destro): ruota in 3D<br>
+    clic su uno Stato: confinanti evidenziati · clic sullo sfondo o Esc: deseleziona
+  </span>
+  <span class="aiuto touch">
+    un dito: sposta · due dita: zoom e rotazione 3D<br>
+    tocca uno Stato: confinanti evidenziati · tocca lo sfondo: deseleziona
+  </span><br>
+  <button id="bottone">Etichette: solo le principali</button>
+  <button id="piatto">Vista: 3D</button>
+  <button id="centra">Centra</button><br>
+  <select id="archi">
+    <option value="uguali">Archi: tutti uguali</option>
+    <option value="spessore">Archi: spessore = km di confine</option>
+    <option value="lunghezza">Archi: lunghezza = km di confine</option>
+  </select>
+  <span id="legenda" class="aiuto"></span><br>
+  <span class="fonte">Componente connessa più grande ·
+    dati: <a href="https://en.wikipedia.org/wiki/List_of_countries_and_territories_by_land_borders"
+             target="_blank" rel="noopener">Wikipedia</a> (CC BY-SA 4.0)</span>
+</details>
+<div id="scheda" hidden><button id="chiudi" aria-label="Chiudi">×</button><div id="contenuto"></div></div>
+<div id="grafo"></div>
+<div id="etichette"></div>
+<script>
+const dati = {"nodes": [{"id": "Afghanistan", "grado": 7}, {"id": "Akrotiri and Dhekelia", "grado": 1}, {"id": "Albania", "grado": 4}, {"id": "Algeria", "grado": 7}, {"id": "Andorra", "grado": 2}, {"id": "Angola", "grado": 4}, {"id": "Argentina", "grado": 5}, {"id": "Armenia", "grado": 4}, {"id": "Austria", "grado": 8}, {"id": "Azerbaijan", "grado": 5}, {"id": "Bahrain", "grado": 1}, {"id": "Bangladesh", "grado": 2}, {"id": "Belarus", "grado": 5}, {"id": "Belgium", "grado": 5}, {"id": "Belize", "grado": 2}, {"id": "Benin", "grado": 4}, {"id": "Bhutan", "grado": 2}, {"id": "Bolivia", "grado": 5}, {"id": "Bosnia and Herzegovina", "grado": 3}, {"id": "Botswana", "grado": 4}, {"id": "Brazil", "grado": 11}, {"id": "Brunei", "grado": 1}, {"id": "Bulgaria", "grado": 5}, {"id": "Burkina Faso", "grado": 6}, {"id": "Burundi", "grado": 3}, {"id": "Cambodia", "grado": 3}, {"id": "Cameroon", "grado": 6}, {"id": "Canada", "grado": 3}, {"id": "Central African Republic", "grado": 6}, {"id": "Chad", "grado": 6}, {"id": "Chile", "grado": 3}, {"id": "China", "grado": 16}, {"id": "Colombia", "grado": 5}, {"id": "Costa Rica", "grado": 2}, {"id": "Croatia", "grado": 5}, {"id": "Cuba", "grado": 1}, {"id": "Cyprus", "grado": 2}, {"id": "Czech Republic", "grado": 4}, {"id": "Côte d'Ivoire", "grado": 5}, {"id": "Democratic Republic of the Congo", "grado": 9}, {"id": "Denmark", "grado": 1}, {"id": "Denmark, Kingdom of", "grado": 2}, {"id": "Djibouti", "grado": 4}, {"id": "East Timor", "grado": 1}, {"id": "Ecuador", "grado": 2}, {"id": "Egypt", "grado": 5}, {"id": "El Salvador", "grado": 2}, {"id": "Equatorial Guinea", "grado": 2}, {"id": "Eritrea", "grado": 3}, {"id": "Estonia", "grado": 2}, {"id": "Eswatini", "grado": 2}, {"id": "Ethiopia", "grado": 6}, {"id": "Finland", "grado": 3}, {"id": "France", "grado": 11}, {"id": "French Guiana", "grado": 2}, {"id": "Gabon", "grado": 3}, {"id": "Gaza Strip", "grado": 2}, {"id": "Georgia", "grado": 5}, {"id": "Germany", "grado": 11}, {"id": "Ghana", "grado": 3}, {"id": "Gibraltar", "grado": 1}, {"id": "Greece", "grado": 4}, {"id": "Greenland", "grado": 1}, {"id": "Guatemala", "grado": 4}, {"id": "Guinea", "grado": 6}, {"id": "Guinea-Bissau", "grado": 2}, {"id": "Guyana", "grado": 3}, {"id": "Honduras", "grado": 3}, {"id": "Hong Kong", "grado": 1}, {"id": "Hungary", "grado": 7}, {"id": "India", "grado": 7}, {"id": "Indonesia", "grado": 3}, {"id": "Iran", "grado": 7}, {"id": "Iraq", "grado": 6}, {"id": "Ireland", "grado": 1}, {"id": "Israel", "grado": 7}, {"id": "Italy", "grado": 6}, {"id": "Jordan", "grado": 6}, {"id": "Kazakhstan", "grado": 5}, {"id": "Kenya", "grado": 5}, {"id": "Kosovo", "grado": 4}, {"id": "Kuwait", "grado": 2}, {"id": "Kyrgyzstan", "grado": 4}, {"id": "Laos", "grado": 5}, {"id": "Latvia", "grado": 4}, {"id": "Lebanon", "grado": 2}, {"id": "Lesotho", "grado": 1}, {"id": "Liberia", "grado": 3}, {"id": "Libya", "grado": 6}, {"id": "Liechtenstein", "grado": 2}, {"id": "Lithuania", "grado": 4}, {"id": "Luxembourg", "grado": 3}, {"id": "Macau", "grado": 1}, {"id": "Malawi", "grado": 3}, {"id": "Malaysia", "grado": 3}, {"id": "Mali", "grado": 7}, {"id": "Mauritania", "grado": 4}, {"id": "Mexico", "grado": 3}, {"id": "Moldova", "grado": 2}, {"id": "Monaco", "grado": 1}, {"id": "Mongolia", "grado": 2}, {"id": "Montenegro", "grado": 5}, {"id": "Morocco", "grado": 3}, {"id": "Mozambique", "grado": 6}, {"id": "Myanmar", "grado": 5}, {"id": "Namibia", "grado": 4}, {"id": "Nepal", "grado": 2}, {"id": "Netherlands", "grado": 2}, {"id": "Netherlands, Kingdom of", "grado": 3}, {"id": "Nicaragua", "grado": 2}, {"id": "Niger", "grado": 7}, {"id": "Nigeria", "grado": 4}, {"id": "North Korea", "grado": 3}, {"id": "North Macedonia", "grado": 5}, {"id": "Norway", "grado": 3}, {"id": "Oman", "grado": 3}, {"id": "Pakistan", "grado": 4}, {"id": "Palestine", "grado": 3}, {"id": "Panama", "grado": 2}, {"id": "Papua New Guinea", "grado": 1}, {"id": "Paraguay", "grado": 3}, {"id": "Peru", "grado": 5}, {"id": "Poland", "grado": 7}, {"id": "Portugal", "grado": 1}, {"id": "Qatar", "grado": 1}, {"id": "Republic of the Congo", "grado": 5}, {"id": "Romania", "grado": 5}, {"id": "Russia", "grado": 15}, {"id": "Rwanda", "grado": 4}, {"id": "Saint Martin", "grado": 1}, {"id": "San Marino", "grado": 1}, {"id": "Saudi Arabia", "grado": 8}, {"id": "Senegal", "grado": 5}, {"id": "Serbia", "grado": 8}, {"id": "Sierra Leone", "grado": 2}, {"id": "Sint Maarten", "grado": 1}, {"id": "Slovakia", "grado": 5}, {"id": "Slovenia", "grado": 4}, {"id": "Somalia", "grado": 3}, {"id": "Somaliland", "grado": 1}, {"id": "South Africa", "grado": 6}, {"id": "South Korea", "grado": 1}, {"id": "South Ossetia", "grado": 2}, {"id": "South Sudan", "grado": 6}, {"id": "Spain", "grado": 6}, {"id": "Sudan", "grado": 7}, {"id": "Suriname", "grado": 4}, {"id": "Sweden", "grado": 2}, {"id": "Switzerland", "grado": 5}, {"id": "Syria", "grado": 5}, {"id": "Tajikistan", "grado": 4}, {"id": "Tanzania", "grado": 8}, {"id": "Thailand", "grado": 4}, {"id": "The Gambia", "grado": 1}, {"id": "Togo", "grado": 3}, {"id": "Tunisia", "grado": 2}, {"id": "Turkey", "grado": 8}, {"id": "Turkmenistan", "grado": 4}, {"id": "Uganda", "grado": 5}, {"id": "Ukraine", "grado": 7}, {"id": "United Arab Emirates", "grado": 2}, {"id": "United Kingdom", "grado": 3}, {"id": "United States", "grado": 3}, {"id": "Uruguay", "grado": 2}, {"id": "Uzbekistan", "grado": 5}, {"id": "Vatican City", "grado": 1}, {"id": "Venezuela", "grado": 3}, {"id": "Vietnam", "grado": 3}, {"id": "West Bank", "grado": 2}, {"id": "Western Sahara", "grado": 3}, {"id": "Yemen", "grado": 2}, {"id": "Zambia", "grado": 8}, {"id": "Zimbabwe", "grado": 4}], "links": [{"source": "Afghanistan", "target": "China", "km": 76.0}, {"source": "Afghanistan", "target": "India", "km": 106.0}, {"source": "Afghanistan", "target": "Iran", "km": 935.0}, {"source": "Afghanistan", "target": "Pakistan", "km": 2670.0}, {"source": "Afghanistan", "target": "Tajikistan", "km": 1206.0}, {"source": "Afghanistan", "target": "Turkmenistan", "km": 744.0}, {"source": "Afghanistan", "target": "Uzbekistan", "km": 144.0}, {"source": "China", "target": "Bhutan", "km": 470.0}, {"source": "China", "target": "India", "km": 3488.0}, {"source": "China", "target": "Kazakhstan", "km": 1533.0}, {"source": "China", "target": "North Korea", "km": 1416.0}, {"source": "China", "target": "Kyrgyzstan", "km": 858.0}, {"source": "China", "target": "Laos", "km": 423.0}, {"source": "China", "target": "Mongolia", "km": 4677.0}, {"source": "China", "target": "Myanmar", "km": 2185.0}, {"source": "China", "target": "Nepal", "km": 1236.0}, {"source": "China", "target": "Pakistan", "km": 596.0}, {"source": "China", "target": "Russia", "km": 3645.0}, {"source": "China", "target": "Tajikistan", "km": 414.0}, {"source": "China", "target": "Vietnam", "km": 1281.0}, {"source": "China", "target": "Hong Kong", "km": 30.0}, {"source": "China", "target": "Macau", "km": 0.34}, {"source": "India", "target": "Bangladesh", "km": 4053.0}, {"source": "India", "target": "Bhutan", "km": 605.0}, {"source": "India", "target": "Myanmar", "km": 1463.0}, {"source": "India", "target": "Nepal", "km": 1690.0}, {"source": "India", "target": "Pakistan", "km": 3320.0}, {"source": "Iran", "target": "Armenia", "km": 35.0}, {"source": "Iran", "target": "Azerbaijan", "km": 432.0}, {"source": "Iran", "target": "Iraq", "km": 1458.0}, {"source": "Iran", "target": "Pakistan", "km": 959.0}, {"source": "Iran", "target": "Turkey", "km": 499.0}, {"source": "Iran", "target": "Turkmenistan", "km": 992.0}, {"source": "Tajikistan", "target": "Kyrgyzstan", "km": 870.0}, {"source": "Tajikistan", "target": "Uzbekistan", "km": 1161.0}, {"source": "Turkmenistan", "target": "Kazakhstan", "km": 379.0}, {"source": "Turkmenistan", "target": "Uzbekistan", "km": 1621.0}, {"source": "Uzbekistan", "target": "Kazakhstan", "km": 2203.0}, {"source": "Uzbekistan", "target": "Kyrgyzstan", "km": 1099.0}, {"source": "Albania", "target": "Greece", "km": 282.0}, {"source": "Albania", "target": "Kosovo", "km": 112.0}, {"source": "Albania", "target": "North Macedonia", "km": 151.0}, {"source": "Albania", "target": "Montenegro", "km": 172.0}, {"source": "Greece", "target": "Bulgaria", "km": 494.0}, {"source": "Greece", "target": "Turkey", "km": 206.0}, {"source": "Greece", "target": "North Macedonia", "km": 246.0}, {"source": "Kosovo", "target": "Montenegro", "km": 79.0}, {"source": "Kosovo", "target": "North Macedonia", "km": 159.0}, {"source": "Kosovo", "target": "Serbia", "km": 352.0}, {"source": "North Macedonia", "target": "Bulgaria", "km": 148.0}, {"source": "North Macedonia", "target": "Serbia", "km": 62.0}, {"source": "Montenegro", "target": "Bosnia and Herzegovina", "km": 225.0}, {"source": "Montenegro", "target": "Croatia", "km": 25.0}, {"source": "Montenegro", "target": "Serbia", "km": 124.0}, {"source": "Algeria", "target": "Libya", "km": 982.0}, {"source": "Algeria", "target": "Mali", "km": 1376.0}, {"source": "Algeria", "target": "Mauritania", "km": 463.0}, {"source": "Algeria", "target": "Morocco", "km": 1559.0}, {"source": "Algeria", "target": "Niger", "km": 956.0}, {"source": "Algeria", "target": "Tunisia", "km": 1010.0}, {"source": "Algeria", "target": "Western Sahara", "km": 42.0}, {"source": "Libya", "target": "Chad", "km": 1055.0}, {"source": "Libya", "target": "Egypt", "km": 1115.0}, {"source": "Libya", "target": "Niger", "km": 354.0}, {"source": "Libya", "target": "Sudan", "km": 383.0}, {"source": "Libya", "target": "Tunisia", "km": 459.0}, {"source": "Mali", "target": "Burkina Faso", "km": 1000.0}, {"source": "Mali", "target": "Côte d'Ivoire", "km": 532.0}, {"source": "Mali", "target": "Guinea", "km": 858.0}, {"source": "Mali", "target": "Mauritania", "km": 2237.0}, {"source": "Mali", "target": "Niger", "km": 821.0}, {"source": "Mali", "target": "Senegal", "km": 419.0}, {"source": "Mauritania", "target": "Senegal", "km": 813.0}, {"source": "Mauritania", "target": "Western Sahara", "km": 1561.0}, {"source": "Morocco", "target": "Western Sahara", "km": 443.0}, {"source": "Morocco", "target": "Spain", "km": 17.0}, {"source": "Niger", "target": "Benin", "km": 266.0}, {"source": "Niger", "target": "Burkina Faso", "km": 628.0}, {"source": "Niger", "target": "Chad", "km": 1175.0}, {"source": "Niger", "target": "Nigeria", "km": 1497.0}, {"source": "Andorra", "target": "France", "km": 56.6}, {"source": "Andorra", "target": "Spain", "km": 63.7}, {"source": "France", "target": "Belgium", "km": 620.0}, {"source": "France", "target": "Brazil", "km": 673.0}, {"source": "France", "target": "Germany", "km": 451.0}, {"source": "France", "target": "Italy", "km": 488.0}, {"source": "France", "target": "Luxembourg", "km": 73.0}, {"source": "France", "target": "Monaco", "km": 4.4}, {"source": "France", "target": "Sint Maarten", "km": 10.2}, {"source": "France", "target": "Spain", "km": 623.0}, {"source": "France", "target": "Suriname", "km": 510.0}, {"source": "France", "target": "Switzerland", "km": 573.0}, {"source": "Spain", "target": "Portugal", "km": 1214.0}, {"source": "Spain", "target": "Gibraltar", "km": 1.2}, {"source": "Spain", "target": "United Kingdom", "km": 1.2}, {"source": "Angola", "target": "Democratic Republic of the Congo", "km": 2511.0}, {"source": "Angola", "target": "Republic of the Congo", "km": 201.0}, {"source": "Angola", "target": "Namibia", "km": 1376.0}, {"source": "Angola", "target": "Zambia", "km": 1110.0}, {"source": "Democratic Republic of the Congo", "target": "Burundi", "km": 233.0}, {"source": "Democratic Republic of the Congo", "target": "Central African Republic", "km": 1577.0}, {"source": "Democratic Republic of the Congo", "target": "Republic of the Congo", "km": 2410.0}, {"source": "Democratic Republic of the Congo", "target": "Rwanda", "km": 217.0}, {"source": "Democratic Republic of the Congo", "target": "South Sudan", "km": 628.0}, {"source": "Democratic Republic of the Congo", "target": "Tanzania", "km": 459.0}, {"source": "Democratic Republic of the Congo", "target": "Uganda", "km": 765.0}, {"source": "Democratic Republic of the Congo", "target": "Zambia", "km": 1930.0}, {"source": "Republic of the Congo", "target": "Cameroon", "km": 523.0}, {"source": "Republic of the Congo", "target": "Central African Republic", "km": 467.0}, {"source": "Republic of the Congo", "target": "Gabon", "km": 1903.0}, {"source": "Namibia", "target": "Botswana", "km": 1360.0}, {"source": "Namibia", "target": "South Africa", "km": 967.0}, {"source": "Namibia", "target": "Zambia", "km": 233.0}, {"source": "Zambia", "target": "Botswana", "km": 0.15}, {"source": "Zambia", "target": "Malawi", "km": 837.0}, {"source": "Zambia", "target": "Mozambique", "km": 419.0}, {"source": "Zambia", "target": "Tanzania", "km": 338.0}, {"source": "Zambia", "target": "Zimbabwe", "km": 797.0}, {"source": "Argentina", "target": "Bolivia", "km": 832.0}, {"source": "Argentina", "target": "Brazil", "km": 1224.0}, {"source": "Argentina", "target": "Chile", "km": 5300.0}, {"source": "Argentina", "target": "Paraguay", "km": 1880.0}, {"source": "Argentina", "target": "Uruguay", "km": 579.0}, {"source": "Bolivia", "target": "Brazil", "km": 3400.0}, {"source": "Bolivia", "target": "Chile", "km": 861.0}, {"source": "Bolivia", "target": "Paraguay", "km": 750.0}, {"source": "Bolivia", "target": "Peru", "km": 900.0}, {"source": "Brazil", "target": "Colombia", "km": 1643.0}, {"source": "Brazil", "target": "French Guiana", "km": 673.0}, {"source": "Brazil", "target": "Guyana", "km": 1119.0}, {"source": "Brazil", "target": "Paraguay", "km": 1290.0}, {"source": "Brazil", "target": "Peru", "km": 2995.0}, {"source": "Brazil", "target": "Suriname", "km": 597.0}, {"source": "Brazil", "target": "Uruguay", "km": 985.0}, {"source": "Brazil", "target": "Venezuela", "km": 2200.0}, {"source": "Chile", "target": "Peru", "km": 160.0}, {"source": "Armenia", "target": "Azerbaijan", "km": 787.0}, {"source": "Armenia", "target": "Georgia", "km": 164.0}, {"source": "Armenia", "target": "Turkey", "km": 268.0}, {"source": "Azerbaijan", "target": "Georgia", "km": 322.0}, {"source": "Azerbaijan", "target": "Russia", "km": 284.0}, {"source": "Azerbaijan", "target": "Turkey", "km": 9.0}, {"source": "Georgia", "target": "Russia", "km": 894.0}, {"source": "Georgia", "target": "Turkey", "km": 273.0}, {"source": "Georgia", "target": "South Ossetia", "km": 334.0}, {"source": "Turkey", "target": "Bulgaria", "km": 240.0}, {"source": "Turkey", "target": "Iraq", "km": 352.0}, {"source": "Turkey", "target": "Syria", "km": 822.0}, {"source": "Austria", "target": "Czech Republic", "km": 362.0}, {"source": "Austria", "target": "Germany", "km": 817.0}, {"source": "Austria", "target": "Hungary", "km": 366.0}, {"source": "Austria", "target": "Italy", "km": 430.0}, {"source": "Austria", "target": "Liechtenstein", "km": 34.0}, {"source": "Austria", "target": "Slovakia", "km": 96.0}, {"source": "Austria", "target": "Slovenia", "km": 330.0}, {"source": "Austria", "target": "Switzerland", "km": 164.0}, {"source": "Czech Republic", "target": "Germany", "km": 815.0}, {"source": "Czech Republic", "target": "Poland", "km": 658.0}, {"source": "Czech Republic", "target": "Slovakia", "km": 215.0}, {"source": "Germany", "target": "Belgium", "km": 167.0}, {"source": "Germany", "target": "Denmark", "km": 68.0}, {"source": "Germany", "target": "Denmark, Kingdom of", "km": 68.0}, {"source": "Germany", "target": "Luxembourg", "km": 138.0}, {"source": "Germany", "target": "Netherlands", "km": 577.0}, {"source": "Germany", "target": "Poland", "km": 456.0}, {"source": "Germany", "target": "Switzerland", "km": 334.0}, {"source": "Germany", "target": "Netherlands, Kingdom of", "km": 577.0}, {"source": "Hungary", "target": "Croatia", "km": 329.0}, {"source": "Hungary", "target": "Romania", "km": 443.0}, {"source": "Hungary", "target": "Serbia", "km": 151.0}, {"source": "Hungary", "target": "Slovakia", "km": 677.0}, {"source": "Hungary", "target": "Slovenia", "km": 102.0}, {"source": "Hungary", "target": "Ukraine", "km": 103.0}, {"source": "Italy", "target": "San Marino", "km": 39.0}, {"source": "Italy", "target": "Slovenia", "km": 232.0}, {"source": "Italy", "target": "Switzerland", "km": 740.0}, {"source": "Italy", "target": "Vatican City", "km": 3.2}, {"source": "Liechtenstein", "target": "Switzerland", "km": 41.0}, {"source": "Slovakia", "target": "Poland", "km": 444.0}, {"source": "Slovakia", "target": "Ukraine", "km": 91.0}, {"source": "Slovenia", "target": "Croatia", "km": 670.0}, {"source": "Russia", "target": "Belarus", "km": 959.0}, {"source": "Russia", "target": "Estonia", "km": 294.0}, {"source": "Russia", "target": "Finland", "km": 1340.0}, {"source": "Russia", "target": "Kazakhstan", "km": 6846.0}, {"source": "Russia", "target": "North Korea", "km": 19.0}, {"source": "Russia", "target": "Latvia", "km": 217.0}, {"source": "Russia", "target": "Lithuania", "km": 227.0}, {"source": "Russia", "target": "Mongolia", "km": 3485.0}, {"source": "Russia", "target": "Norway", "km": 196.0}, {"source": "Russia", "target": "Poland", "km": 206.0}, {"source": "Russia", "target": "Ukraine", "km": 1576.0}, {"source": "Russia", "target": "South Ossetia", "km": 74.0}, {"source": "Bahrain", "target": "Saudi Arabia", "km": 0.196}, {"source": "Saudi Arabia", "target": "Iraq", "km": 814.0}, {"source": "Saudi Arabia", "target": "Jordan", "km": 744.0}, {"source": "Saudi Arabia", "target": "Kuwait", "km": 222.0}, {"source": "Saudi Arabia", "target": "Oman", "km": 676.0}, {"source": "Saudi Arabia", "target": "Qatar", "km": 60.0}, {"source": "Saudi Arabia", "target": "United Arab Emirates", "km": 457.0}, {"source": "Saudi Arabia", "target": "Yemen", "km": 1458.0}, {"source": "Bangladesh", "target": "Myanmar", "km": 193.0}, {"source": "Myanmar", "target": "Laos", "km": 235.0}, {"source": "Myanmar", "target": "Thailand", "km": 2416.0}, {"source": "Belarus", "target": "Latvia", "km": 141.0}, {"source": "Belarus", "target": "Lithuania", "km": 502.0}, {"source": "Belarus", "target": "Poland", "km": 407.0}, {"source": "Belarus", "target": "Ukraine", "km": 891.0}, {"source": "Latvia", "target": "Estonia", "km": 339.0}, {"source": "Latvia", "target": "Lithuania", "km": 453.0}, {"source": "Lithuania", "target": "Poland", "km": 91.0}, {"source": "Poland", "target": "Ukraine", "km": 526.0}, {"source": "Ukraine", "target": "Moldova", "km": 939.0}, {"source": "Ukraine", "target": "Romania", "km": 531.0}, {"source": "Belgium", "target": "Luxembourg", "km": 148.0}, {"source": "Belgium", "target": "Netherlands", "km": 450.0}, {"source": "Belgium", "target": "Netherlands, Kingdom of", "km": 450.0}, {"source": "Belize", "target": "Guatemala", "km": 266.0}, {"source": "Belize", "target": "Mexico", "km": 250.0}, {"source": "Guatemala", "target": "El Salvador", "km": 203.0}, {"source": "Guatemala", "target": "Honduras", "km": 256.0}, {"source": "Guatemala", "target": "Mexico", "km": 962.0}, {"source": "Mexico", "target": "United States", "km": 3141.0}, {"source": "Benin", "target": "Burkina Faso", "km": 306.0}, {"source": "Benin", "target": "Nigeria", "km": 773.0}, {"source": "Benin", "target": "Togo", "km": 644.0}, {"source": "Burkina Faso", "target": "Côte d'Ivoire", "km": 584.0}, {"source": "Burkina Faso", "target": "Ghana", "km": 549.0}, {"source": "Burkina Faso", "target": "Togo", "km": 126.0}, {"source": "Nigeria", "target": "Cameroon", "km": 1690.0}, {"source": "Nigeria", "target": "Chad", "km": 87.0}, {"source": "Togo", "target": "Ghana", "km": 877.0}, {"source": "Peru", "target": "Colombia", "km": 1496.0}, {"source": "Peru", "target": "Ecuador", "km": 1420.0}, {"source": "Bosnia and Herzegovina", "target": "Croatia", "km": 932.0}, {"source": "Bosnia and Herzegovina", "target": "Serbia", "km": 302.0}, {"source": "Croatia", "target": "Serbia", "km": 241.0}, {"source": "Serbia", "target": "Bulgaria", "km": 318.0}, {"source": "Serbia", "target": "Romania", "km": 476.0}, {"source": "Botswana", "target": "South Africa", "km": 1840.0}, {"source": "Botswana", "target": "Zimbabwe", "km": 813.0}, {"source": "South Africa", "target": "Eswatini", "km": 430.0}, {"source": "South Africa", "target": "Lesotho", "km": 909.0}, {"source": "South Africa", "target": "Mozambique", "km": 491.0}, {"source": "South Africa", "target": "Zimbabwe", "km": 225.0}, {"source": "Zimbabwe", "target": "Mozambique", "km": 1231.0}, {"source": "Colombia", "target": "Ecuador", "km": 590.0}, {"source": "Colombia", "target": "Panama", "km": 225.0}, {"source": "Colombia", "target": "Venezuela", "km": 2050.0}, {"source": "French Guiana", "target": "Suriname", "km": 510.0}, {"source": "Guyana", "target": "Suriname", "km": 600.0}, {"source": "Guyana", "target": "Venezuela", "km": 743.0}, {"source": "Brunei", "target": "Malaysia", "km": 381.0}, {"source": "Malaysia", "target": "Indonesia", "km": 1782.0}, {"source": "Malaysia", "target": "Thailand", "km": 506.0}, {"source": "Bulgaria", "target": "Romania", "km": 608.0}, {"source": "Romania", "target": "Moldova", "km": 450.0}, {"source": "Côte d'Ivoire", "target": "Ghana", "km": 668.0}, {"source": "Côte d'Ivoire", "target": "Guinea", "km": 610.0}, {"source": "Côte d'Ivoire", "target": "Liberia", "km": 716.0}, {"source": "Burundi", "target": "Rwanda", "km": 290.0}, {"source": "Burundi", "target": "Tanzania", "km": 451.0}, {"source": "Rwanda", "target": "Tanzania", "km": 217.0}, {"source": "Rwanda", "target": "Uganda", "km": 169.0}, {"source": "Tanzania", "target": "Kenya", "km": 769.0}, {"source": "Tanzania", "target": "Malawi", "km": 475.0}, {"source": "Tanzania", "target": "Mozambique", "km": 756.0}, {"source": "Tanzania", "target": "Uganda", "km": 396.0}, {"source": "Cambodia", "target": "Laos", "km": 541.0}, {"source": "Cambodia", "target": "Thailand", "km": 803.0}, {"source": "Cambodia", "target": "Vietnam", "km": 1228.0}, {"source": "Laos", "target": "Thailand", "km": 1754.0}, {"source": "Laos", "target": "Vietnam", "km": 2130.0}, {"source": "Cameroon", "target": "Central African Republic", "km": 797.0}, {"source": "Cameroon", "target": "Chad", "km": 1094.0}, {"source": "Cameroon", "target": "Equatorial Guinea", "km": 189.0}, {"source": "Cameroon", "target": "Gabon", "km": 298.0}, {"source": "Central African Republic", "target": "Chad", "km": 1197.0}, {"source": "Central African Republic", "target": "South Sudan", "km": 682.0}, {"source": "Central African Republic", "target": "Sudan", "km": 483.0}, {"source": "Chad", "target": "Sudan", "km": 1360.0}, {"source": "Equatorial Guinea", "target": "Gabon", "km": 350.0}, {"source": "Canada", "target": "United States", "km": 8893.0}, {"source": "Canada", "target": "Greenland", "km": 1.2}, {"source": "Canada", "target": "Denmark, Kingdom of", "km": 1.2}, {"source": "United States", "target": "Cuba", "km": 29.0}, {"source": "South Sudan", "target": "Ethiopia", "km": 883.0}, {"source": "South Sudan", "target": "Kenya", "km": 232.0}, {"source": "South Sudan", "target": "Sudan", "km": 1937.0}, {"source": "South Sudan", "target": "Uganda", "km": 435.0}, {"source": "Sudan", "target": "Egypt", "km": 1273.0}, {"source": "Sudan", "target": "Eritrea", "km": 605.0}, {"source": "Sudan", "target": "Ethiopia", "km": 723.0}, {"source": "Kazakhstan", "target": "Kyrgyzstan", "km": 1051.0}, {"source": "North Korea", "target": "South Korea", "km": 238.0}, {"source": "Panama", "target": "Costa Rica", "km": 330.0}, {"source": "Uganda", "target": "Kenya", "km": 933.0}, {"source": "Costa Rica", "target": "Nicaragua", "km": 309.0}, {"source": "Nicaragua", "target": "Honduras", "km": 922.0}, {"source": "Guinea", "target": "Guinea-Bissau", "km": 386.0}, {"source": "Guinea", "target": "Liberia", "km": 563.0}, {"source": "Guinea", "target": "Senegal", "km": 330.0}, {"source": "Guinea", "target": "Sierra Leone", "km": 652.0}, {"source": "Liberia", "target": "Sierra Leone", "km": 306.0}, {"source": "Cyprus", "target": "Akrotiri and Dhekelia", "km": 152.0}, {"source": "Cyprus", "target": "United Kingdom", "km": 152.0}, {"source": "Djibouti", "target": "Eritrea", "km": 125.0}, {"source": "Djibouti", "target": "Ethiopia", "km": 342.0}, {"source": "Djibouti", "target": "Somaliland", "km": 61.0}, {"source": "Djibouti", "target": "Somalia", "km": 61.0}, {"source": "Eritrea", "target": "Ethiopia", "km": 912.0}, {"source": "Ethiopia", "target": "Kenya", "km": 861.0}, {"source": "Ethiopia", "target": "Somalia", "km": 1600.0}, {"source": "East Timor", "target": "Indonesia", "km": 228.0}, {"source": "Indonesia", "target": "Papua New Guinea", "km": 820.0}, {"source": "Egypt", "target": "Gaza Strip", "km": 11.0}, {"source": "Egypt", "target": "Israel", "km": 266.0}, {"source": "Egypt", "target": "Palestine", "km": 11.0}, {"source": "Gaza Strip", "target": "Israel", "km": 51.0}, {"source": "Israel", "target": "Jordan", "km": 238.0}, {"source": "Israel", "target": "Lebanon", "km": 79.0}, {"source": "Israel", "target": "Syria", "km": 76.0}, {"source": "Israel", "target": "West Bank", "km": 307.0}, {"source": "Israel", "target": "Palestine", "km": 358.0}, {"source": "El Salvador", "target": "Honduras", "km": 342.0}, {"source": "Eswatini", "target": "Mozambique", "km": 105.0}, {"source": "Mozambique", "target": "Malawi", "km": 1569.0}, {"source": "Kenya", "target": "Somalia", "km": 682.0}, {"source": "Finland", "target": "Norway", "km": 736.0}, {"source": "Finland", "target": "Sweden", "km": 614.0}, {"source": "Norway", "target": "Sweden", "km": 1619.0}, {"source": "The Gambia", "target": "Senegal", "km": 740.0}, {"source": "Senegal", "target": "Guinea-Bissau", "km": 338.0}, {"source": "Iraq", "target": "Jordan", "km": 181.0}, {"source": "Iraq", "target": "Kuwait", "km": 240.0}, {"source": "Iraq", "target": "Syria", "km": 605.0}, {"source": "Jordan", "target": "Syria", "km": 375.0}, {"source": "Jordan", "target": "West Bank", "km": 97.0}, {"source": "Jordan", "target": "Palestine", "km": 97.0}, {"source": "Syria", "target": "Lebanon", "km": 375.0}, {"source": "Ireland", "target": "United Kingdom", "km": 499.0}, {"source": "Netherlands, Kingdom of", "target": "Saint Martin", "km": 10.2}, {"source": "Oman", "target": "United Arab Emirates", "km": 410.0}, {"source": "Oman", "target": "Yemen", "km": 288.0}]};
+const maxGrado = Math.max(...dati.nodes.map(n => n.grado));
+const schermoPiccolo = matchMedia('(max-width: 600px)').matches;
+
+// su schermi piccoli il pannello parte chiuso, così si vede il grafo
+if (schermoPiccolo) document.getElementById('info').open = false;
+
+// per ogni Stato i confinanti e i km di ogni confine (prima che la libreria
+// sostituisca source/target con gli oggetti nodo)
+const vicini = {};
+const kmConfine = {};
+dati.nodes.forEach(n => { vicini[n.id] = new Set(); kmConfine[n.id] = {}; });
+dati.links.forEach(l => {
+  vicini[l.source].add(l.target); vicini[l.target].add(l.source);
+  kmConfine[l.source][l.target] = kmConfine[l.target][l.source] = l.km;
+});
+const nodoPerId = Object.fromEntries(dati.nodes.map(n => [n.id, n]));
+const formattaKm = km => km.toLocaleString('it-IT') + ' km';
+
+let selezionato = null;
+const nodoAcceso = n => !selezionato || n.id === selezionato || vicini[selezionato].has(n.id);
+// lo Stato selezionato ha volume 8 volte maggiore (quindi raggio doppio)
+const dimensione = n => (1 + n.grado * 1.5) * (n.id === selezionato ? 8 : 1);
+const maxKm = Math.max(...dati.links.map(l => l.km));
+let modoArchi = 'uguali';
+// spessore proporzionale alla radice dei km: con la proporzione lineare
+// i confini corti (Vaticano 3 km) sparirebbero accanto a USA-Canada (8893 km)
+const spessoreKm = l => 0.3 + 5 * Math.sqrt(l.km / maxKm);
+const arcoAcceso = l => selezionato && (l.source.id === selezionato || l.target.id === selezionato);
+
+// controlli 'orbit' di three.js: permettono di scegliere cosa fa ogni tasto del mouse
+const grafo = ForceGraph3D({ controlType: 'orbit' })(document.getElementById('grafo'))
+  .showNavInfo(false)
+  .graphData(dati)
+  .backgroundColor('#0b0e14')
+  .nodeLabel(n => `${n.id}: ${n.grado} confini`)
+  .nodeVal(dimensione)
+  .nodeColor(n => n.id === selezionato ? '#ffcc00' : nodoAcceso(n) ? `hsl(${240 - 200 * n.grado / maxGrado}, 85%, 55%)` : '#2a2f3a')
+  .nodeOpacity(0.95)
+  .linkColor(l => arcoAcceso(l) ? '#ffcc00' : (selezionato ? '#1c2029' : '#56606e'))
+  .linkWidth(l => {
+    if (modoArchi === 'spessore') return arcoAcceso(l) ? spessoreKm(l) * 1.5 + 0.5 : spessoreKm(l);
+    return arcoAcceso(l) ? 2.5 : 0;
+  })
+  .linkLabel(l => `${l.source.id} — ${l.target.id}: ${formattaKm(l.km)}`)
+  // particelle che scorrono lungo gli archi dello Stato selezionato
+  .linkDirectionalParticles(l => arcoAcceso(l) ? 4 : 0)
+  .linkDirectionalParticleWidth(l => modoArchi === 'spessore' ? spessoreKm(l) * 1.5 + 1.5 : 3)
+  .linkDirectionalParticleColor(() => '#fff3b0')
+  .linkOpacity(0.85)
+  .onNodeClick(seleziona)
+  .onLinkClick(mostraArco)
+  .onBackgroundClick(deseleziona)
+  .onEngineStop(() => { if (!inquadrato) { inquadrato = true; grafo.zoomToFit(600, 40); } });
+
+// nodi più distanziati del normale, così le etichette si sovrappongono meno
+let inquadrato = false;
+grafo.d3Force('charge').strength(-150);
+grafo.d3Force('link').distance(40);
+const forzaArchiNormale = grafo.d3Force('link').strength();   // per ripristinarla
+
+// Navigazione tipo mappa: trascinare col sinistro sposta la vista sul piano
+// dello schermo (niente movimento in profondità), la rotella zooma verso il
+// puntatore. Con Shift premuto i controlli orbit trasformano lo spostamento
+// in rotazione; il tasto destro ruota sempre.
+// Sul touch: un dito sposta, due dita zoomano (pizzico) e ruotano.
+// Valori di THREE.MOUSE: 0 = ROTATE, 1 = DOLLY (zoom), 2 = PAN
+// Valori di THREE.TOUCH: 1 = PAN, 3 = DOLLY_ROTATE
+const controlli = grafo.controls();
+controlli.mouseButtons = { LEFT: 2, MIDDLE: 1, RIGHT: 0 };
+controlli.touches = { ONE: 1, TWO: 3 };
+controlli.screenSpacePanning = true;
+controlli.zoomToCursor = true;
+
+addEventListener('resize', () => grafo.width(innerWidth).height(innerHeight));
+
+// Clic su uno Stato: inquadra lo Stato e TUTTI i suoi confinanti, mantenendo
+// l'orientamento attuale della vista (come quando su una mappa si centra un luogo).
+function seleziona(n) {
+  selezionato = n.id;
+  inquadrato = true;                // l'inquadratura automatica non deve annullare lo zoom
+  aggiorna();
+  mostraStato(n);
+
+  const gruppo = dati.nodes.filter(m => m.id === n.id || vicini[n.id].has(m.id));
+  const pos = m => ({ x: m.x, y: m.y, z: m.z || 0 });
+
+  // centro del riquadro che contiene il gruppo e raggio della sfera che lo racchiude
+  const centro = {};
+  for (const a of ['x', 'y', 'z']) {
+    const v = gruppo.map(m => pos(m)[a]);
+    centro[a] = (Math.min(...v) + Math.max(...v)) / 2;
+  }
+  const raggio = Math.max(30, ...gruppo.map(m => {
+    const p = pos(m);
+    return Math.hypot(p.x - centro.x, p.y - centro.y, p.z - centro.z);
+  }));
+
+  // distanza a cui la sfera entra nello schermo (campo visivo verticale e orizzontale),
+  // con un 30% di margine per le etichette e i pannelli
+  const cam = grafo.camera();
+  const semiV = cam.fov / 2 * Math.PI / 180;
+  const semiO = Math.atan(Math.tan(semiV) * cam.aspect);
+  const distanza = raggio * 1.3 / Math.sin(Math.min(semiV, semiO));
+
+  const c = cam.position, t = controlli.target;
+  const d = Math.hypot(c.x - t.x, c.y - t.y, c.z - t.z) || 1;
+  grafo.cameraPosition({ x: centro.x + (c.x - t.x) / d * distanza,
+                         y: centro.y + (c.y - t.y) / d * distanza,
+                         z: centro.z + (c.z - t.z) / d * distanza }, centro, 1000);
+}
+
+function deseleziona() {
+  selezionato = null;
+  aggiorna();
+  document.getElementById('scheda').hidden = true;
+}
+
+// Scheda in basso: i confini dello Stato selezionato, dal più lungo, oppure i
+// km di un arco toccato. Sul telefono sostituisce i tooltip (lì non c'è hover).
+// Costruita con textContent: i nomi arrivano da Wikipedia, non li tratto come HTML.
+const contenuto = document.getElementById('contenuto');
+
+function mostraStato(n) {
+  const confini = Object.entries(kmConfine[n.id]).sort((a, b) => b[1] - a[1]);
+  const totale = confini.reduce((s, [, km]) => s + km, 0);
+  const titolo = document.createElement('div');
+  titolo.innerHTML = '<b></b> — <span></span>';
+  titolo.querySelector('b').textContent = n.id;
+  titolo.querySelector('span').textContent =
+    `${confini.length} confini nel grafo, ${formattaKm(Math.round(totale * 10) / 10)}`;
+  const lista = document.createElement('ol');
+  for (const [id, km] of confini) {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = '#';
+    a.textContent = id;
+    a.onclick = e => { e.preventDefault(); seleziona(nodoPerId[id]); };   // salta allo Stato vicino
+    li.append(a, ': ' + formattaKm(km));
+    lista.append(li);
+  }
+  contenuto.replaceChildren(titolo, lista);
+  document.getElementById('scheda').hidden = false;
+}
+
+function mostraArco(l) {
+  contenuto.replaceChildren(document.createElement('b'));
+  contenuto.firstChild.textContent = `${l.source.id} — ${l.target.id}`;
+  contenuto.append(': ' + formattaKm(l.km));
+  document.getElementById('scheda').hidden = false;
+}
+
+document.getElementById('chiudi').onclick = deseleziona;
+
+// Riporta la vista frontale e inquadra tutto il grafo
+function centra() {
+  grafo.cameraPosition({ x: 0, y: 0, z: 1000 }, { x: 0, y: 0, z: 0 }, 0);
+  setTimeout(() => grafo.zoomToFit(800, 40), 30);
+}
+document.getElementById('centra').onclick = centra;
+
+// Vista piatta: il layout diventa 2D, come una vera mappa
+let piatto = false;
+document.getElementById('piatto').onclick = e => {
+  piatto = !piatto;
+  if (piatto) dati.nodes.forEach(n => { n.z = 0; n.vz = 0; });
+  grafo.numDimensions(piatto ? 2 : 3);
+  e.target.textContent = 'Vista: ' + (piatto ? 'piatta' : '3D');
+  inquadrato = false;               // a layout assestato inquadra di nuovo
+  centra();
+};
+
+// Modo degli archi: normali, spessore = km, lunghezza = km.
+// Per la lunghezza la distanza "a riposo" di ogni arco diventa proporzionale
+// ai km (con un minimo, altrimenti i confini di pochi km schiaccerebbero i
+// nodi uno sull'altro); il layout a forze poi la rispetta solo in modo
+// approssimativo, perché non può accontentare tutti gli archi insieme.
+const legende = {
+  uguali: '',
+  spessore: 'più spesso = confine più lungo',
+  lunghezza: 'più lungo = confine più lungo (circa: 1 unità ogni 40 km)',
+};
+document.getElementById('archi').onchange = e => {
+  const prima = modoArchi;
+  modoArchi = e.target.value;
+  document.getElementById('legenda').textContent = legende[modoArchi];
+  grafo.linkDirectionalParticleWidth(grafo.linkDirectionalParticleWidth());
+  aggiorna();
+  if (modoArchi === 'lunghezza' || prima === 'lunghezza') {
+    const lung = modoArchi === 'lunghezza';
+    // archi più rigidi e repulsione più debole, altrimenti la repulsione tra
+    // i nodi tiene lontani anche gli Stati con pochi km di confine.
+    // Provato a parte: con repulsione -150 la correlazione lunghezza/km è 0.37,
+    // con -5 e archi rigidi sale a 0.95 (errore mediano sulla lunghezza ~20%)
+    grafo.d3Force('link').distance(lung ? l => 8 + l.km / 40 : 40)
+                         .strength(lung ? 1 : forzaArchiNormale);
+    grafo.d3Force('charge').strength(lung ? -5 : -150);
+    grafo.d3ReheatSimulation();
+    if (!selezionato) inquadrato = false;   // a layout assestato inquadra di nuovo
+  }
+};
+
+// Ricerca: scrivendo il nome (con suggerimenti) lo Stato viene selezionato
+const elenco = document.getElementById('stati');
+dati.nodes.map(n => n.id).sort().forEach(id => elenco.append(new Option(id)));
+document.getElementById('cerca').addEventListener('change', e => {
+  const q = e.target.value.trim().toLowerCase();
+  if (!q) return;
+  const n = dati.nodes.find(n => n.id.toLowerCase() === q) ||
+            dati.nodes.find(n => n.id.toLowerCase().includes(q));
+  if (!n) return;
+  e.target.blur();                               // sul telefono chiude la tastiera
+  if (schermoPiccolo) document.getElementById('info').open = false;
+  seleziona(n);
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { deseleziona(); document.getElementById('cerca').value = ''; }
+});
+
+// riassegnare gli stessi accessor forza il ridisegno dei colori
+function aggiorna() {
+  grafo.nodeVal(grafo.nodeVal()).nodeColor(grafo.nodeColor())
+       .linkColor(grafo.linkColor()).linkWidth(grafo.linkWidth())
+       .linkDirectionalParticles(grafo.linkDirectionalParticles());
+}
+
+// Etichette: un <div> per Stato, riposizionato a ogni fotogramma proiettando
+// il punto 3D sullo schermo. Più confini = testo più grande.
+const livello = document.getElementById('etichette');
+dati.nodes.forEach(n => {
+  n.div = document.createElement('div');
+  n.div.className = 'etichetta';
+  n.div.textContent = n.id;
+  n.div.style.fontSize = (schermoPiccolo ? 9 + n.grado * 0.4 : 10 + n.grado * 0.6) + 'px';
+  livello.appendChild(n.div);
+});
+
+// 0 = tutte, 1 = solo Stati con almeno 6 confini, 2 = nessuna
+const modi = ['tutte', 'solo le principali', 'nessuna'];
+let modo = 1;
+document.getElementById('bottone').onclick = e => {
+  modo = (modo + 1) % modi.length;
+  e.target.textContent = 'Etichette: ' + modi[modo];
+};
+
+function visibile(n) {
+  if (modo === 2) return selezionato && nodoAcceso(n);   // con un clic si vedono comunque i confinanti
+  if (modo === 1) return n.grado >= 6 || (selezionato && nodoAcceso(n));
+  return true;
+}
+
+function disegnaEtichette() {
+  const cam = grafo.camera();
+  const m = cam.matrixWorld.elements;          // direzione in cui guarda la camera: -(m[8], m[9], m[10])
+  for (const n of dati.nodes) {
+    const davanti = n.x !== undefined &&
+      (n.x - cam.position.x) * -m[8] + (n.y - cam.position.y) * -m[9] + ((n.z || 0) - cam.position.z) * -m[10] > 0;
+    if (!davanti || !visibile(n)) { n.div.style.display = 'none'; continue; }
+    const raggio = Math.cbrt(dimensione(n)) * 4;   // stesso raggio della sfera disegnata
+    const p = grafo.graph2ScreenCoords(n.x, n.y + raggio, n.z || 0);
+    const acceso = nodoAcceso(n);
+    n.div.style.display = 'block';
+    n.div.style.transform = `translate(${p.x}px, ${p.y}px) translate(-50%, -110%)`;
+    n.div.style.opacity = acceso ? 1 : 0.12;
+    n.div.style.fontWeight = n.id === selezionato ? 'bold' : 'normal';
+    n.div.style.color = n.id === selezionato ? '#ffcc00' : '#fff';
+    n.div.style.zIndex = (n.id === selezionato ? 200 : acceso && selezionato ? 100 : 0) + n.grado;
+  }
+  requestAnimationFrame(disegnaEtichette);
+}
+disegnaEtichette();
+</script>
+</body>
+</html>
