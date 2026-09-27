@@ -2,7 +2,7 @@
 
 Grafo interattivo degli Stati del mondo: ogni nodo è uno Stato, ogni arco un confine terrestre, con i km di ciascun confine. Si naviga come una mappa, e con Shift (o con due dita sul telefono) si ruota in 3D.
 
-**Demo:** https://NOME-UTENTE.github.io/grafo-confini-3d/
+**Demo:** https://marchegg9494.github.io/grafo-confini-3d/
 
 ## Cosa si può fare
 
