@@ -4,6 +4,8 @@ Grafo interattivo degli Stati del mondo: ogni nodo è uno Stato, ogni arco un co
 
 **Demo:** https://marchegg9494.github.io/grafo-confini-3d/
 
+**Autore:** marchegg94
+
 ## Cosa si può fare
 
 - **Navigare come su una mappa.** Trascinando si sposta la vista, la rotella fa lo zoom verso il puntatore, e con Shift + trascina o col tasto destro si ruota in 3D. Sul telefono un dito sposta la vista e due dita fanno zoom e rotazione.
